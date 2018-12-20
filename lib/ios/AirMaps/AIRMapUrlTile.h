@@ -16,17 +16,24 @@
 #import "AIRMap.h"
 #import "RCTConvert+AirMap.h"
 
+@interface KTTileOverlay : MKTileOverlay
+@property (nonatomic, weak) NSCache *cache;
+@property (nonatomic, strong) NSOperationQueue *downloadQueue;
+@end
+
 @interface AIRMapUrlTile : MKAnnotationView <MKOverlay>
 
 @property (nonatomic, weak) AIRMap *map;
 
-@property (nonatomic, strong) MKTileOverlay *tileOverlay;
+@property (nonatomic, strong) KTTileOverlay *tileOverlay;
 @property (nonatomic, strong) MKTileOverlayRenderer *renderer;
 @property (nonatomic, copy) NSString *urlTemplate;
+@property (nonatomic, strong) NSCache *cache;
 @property NSInteger maximumZ;
 @property NSInteger minimumZ;
 @property BOOL shouldReplaceMapContent;
 @property CGFloat tileSize;
+@property CGFloat alpha;
 
 #pragma mark MKOverlay protocol
 

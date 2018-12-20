@@ -58,6 +58,7 @@ public class AirMapUrlTile extends AirMapFeature {
   private float zIndex;
   private float maximumZ;
   private float minimumZ;
+  private float alpha;
 
   public AirMapUrlTile(Context context) {
     super(context);
@@ -73,6 +74,13 @@ public class AirMapUrlTile extends AirMapFeature {
     }
   }
 
+  public void setAlpha(float alpha) {
+    this.alpha = alpha;
+
+    if (tileOverlay != null) {
+      tileOverlay.setTransparency(1 - alpha);
+    }
+  }
   public void setZIndex(float zIndex) {
     this.zIndex = zIndex;
     if (tileOverlay != null) {
@@ -117,6 +125,7 @@ public class AirMapUrlTile extends AirMapFeature {
   @Override
   public void addToMap(GoogleMap map) {
     this.tileOverlay = map.addTileOverlay(getTileOverlayOptions());
+    this.tileOverlay.setTransparency(1 - this.alpha);
   }
 
   @Override

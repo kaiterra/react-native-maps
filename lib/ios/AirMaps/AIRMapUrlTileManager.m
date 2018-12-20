@@ -29,7 +29,15 @@ RCT_EXPORT_MODULE()
 - (UIView *)view
 {
     AIRMapUrlTile *tile = [AIRMapUrlTile new];
+    tile.cache = self.tileCache;
     return tile;
+}
+
+- (NSCache *)tileCache {
+    if (!_tileCache) {
+        _tileCache = [[NSCache alloc] init];
+    }
+    return _tileCache;
 }
 
 RCT_EXPORT_VIEW_PROPERTY(urlTemplate, NSString)
@@ -37,5 +45,6 @@ RCT_EXPORT_VIEW_PROPERTY(maximumZ, NSInteger)
 RCT_EXPORT_VIEW_PROPERTY(minimumZ, NSInteger)
 RCT_EXPORT_VIEW_PROPERTY(shouldReplaceMapContent, BOOL)
 RCT_EXPORT_VIEW_PROPERTY(tileSize, CGFloat)
+RCT_EXPORT_VIEW_PROPERTY(alpha, CGFloat)
 
 @end

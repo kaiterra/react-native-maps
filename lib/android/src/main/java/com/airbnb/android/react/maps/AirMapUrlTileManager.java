@@ -54,5 +54,10 @@ public class AirMapUrlTileManager extends ViewGroupManager<AirMapUrlTile> {
   public void setMaximumZ(AirMapUrlTile view, float maximumZ) {
     view.setMaximumZ(maximumZ);
   }
+  
+  @ReactProp(name = "alpha", defaultFloat = 1.0f)
+  public void setAlpha(AirMapUrlTile view, float alpha) {
+    view.setAlpha(alpha);
+  }
 
 }

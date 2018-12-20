@@ -10,5 +10,5 @@
 #import <React/RCTViewManager.h>
 
 @interface AIRMapUrlTileManager : RCTViewManager
-
+@property (nonatomic, strong) NSCache *tileCache;
 @end

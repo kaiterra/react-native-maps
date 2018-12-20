@@ -388,6 +388,7 @@ declare module "react-native-maps" {
         maximumZ?: number;
         zIndex?: number;
         tileSize?: number;
+        alpha? : number;
     }
 
     export class UrlTile extends React.Component<MapUrlTileProps, any> {
