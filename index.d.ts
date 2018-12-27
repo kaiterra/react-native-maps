@@ -389,6 +389,7 @@ declare module "react-native-maps" {
         zIndex?: number;
         tileSize?: number;
         alpha? : number;
+        shouldDrawGridLine? : boolean;
     }
 
     export class UrlTile extends React.Component<MapUrlTileProps, any> {
