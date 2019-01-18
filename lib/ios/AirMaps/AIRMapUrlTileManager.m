@@ -29,9 +29,11 @@ RCT_EXPORT_MODULE()
 - (UIView *)view
 {
     AIRMapUrlTile *tile = [AIRMapUrlTile new];
+    tile.bridge = self.bridge;
     return tile;
 }
 
+RCT_EXPORT_VIEW_PROPERTY(backgroundTile,BOOL)
 RCT_EXPORT_VIEW_PROPERTY(urlTemplate, NSString)
 RCT_EXPORT_VIEW_PROPERTY(maximumZ, NSInteger)
 RCT_EXPORT_VIEW_PROPERTY(minimumZ, NSInteger)

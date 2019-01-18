@@ -12,6 +12,7 @@
 
 #import <React/RCTComponent.h>
 #import <React/RCTView.h>
+#import <React/RCTBridge.h>
 #import "AIRMapCoordinate.h"
 #import "AIRMap.h"
 #import "RCTConvert+AirMap.h"
@@ -22,6 +23,8 @@
 @property (nonatomic, strong) NSCache *cache;
 @property BOOL useDefaultRenderImplementation;
 @property BOOL shouldDrawGridLine;
+@property BOOL backgroundTile;
+@property (nonatomic, strong) RCTBridge *bridge;
 @end
 
 @interface AIRMapUrlTile : MKAnnotationView <MKOverlay>
@@ -39,6 +42,8 @@
 @property CGFloat tileSize;
 @property CGFloat alpha;
 
+@property (nonatomic, strong) RCTBridge *bridge;
+@property BOOL backgroundTile;
 #pragma mark MKOverlay protocol
 
 @property(nonatomic, readonly) CLLocationCoordinate2D coordinate;

@@ -9,7 +9,43 @@
 #import "AIRMapUrlTile.h"
 #import <React/UIView+React.h>
 
+#import <React/RCTBridgeModule.h>
+#import <React/RCTEventEmitter.h>
+
+static NSString *const KTMapWillLoadTileEvent = @"mapWillLoadTileForPath";
+
+@interface KTTileOverlayEventEmitter : RCTEventEmitter <RCTBridgeModule>
+- (void)overlayWillLoadTileOverlayForPath:(MKTileOverlayPath)path;
+@end
+
+@implementation KTTileOverlayEventEmitter
+
+RCT_EXPORT_MODULE()
+
+- (NSArray<NSString *> *)supportedEvents{
+    return @[KTMapWillLoadTileEvent];
+}
+
+- (void)overlayWillLoadTileOverlayForPath:(MKTileOverlayPath)path {
+    [self sendEventWithName:KTMapWillLoadTileEvent body:@{@"path": @{@"x": @(path.x),@"y": @(path.y),@"z": @(path.z)}}];
+}
+
+- (NSDictionary *)constantsToExport{
+    return @{@"KTMapWillLoadTileEvent":KTMapWillLoadTileEvent};
+}
+
+@end
+
+
 @implementation KTTileOverlayRenderer
+
+- (NSInteger)zoomLevelForZoomScale:(MKZoomScale)zoomScale {
+    return log2(zoomScale) + 20;
+}
+
+- (MKZoomScale)zoomScaleForZoomLevel:(NSInteger)zoomLevel {
+    return pow(2, zoomLevel - 20);
+}
 
 /* TODO: should take maximumZ of MKTileOverlay into account. */
 - (MKTileOverlayPath)pathForMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale {
@@ -41,29 +77,47 @@
     } else {
         __weak typeof(self) weakSelf = self;
 
-        MKTileOverlayPath path = [self pathForMapRect:mapRect zoomScale:zoomScale];
-        
         MKTileOverlay *overlay = self.overlay;
+        NSInteger maximumZ = overlay.maximumZ;
+
+        MKZoomScale maximumZoomScale = zoomScale;
+        if ([self zoomLevelForZoomScale:maximumZoomScale] > maximumZ) {
+            if (self.backgroundTile) {
+                // Bounce back to maximum Z supported by background TileOverlay
+                maximumZoomScale = [self zoomScaleForZoomLevel:maximumZ];
+            } else {
+                // Give up rendering for unsupported zoom scale.
+                return NO;
+            }
+        }
+        
+        MKTileOverlayPath path = [self pathForMapRect:mapRect zoomScale:maximumZoomScale];
+
         NSURL *url = [overlay URLForTilePath:path];
         id cachedData = [self.cache objectForKey:[url absoluteString]];
         if (cachedData && [cachedData isKindOfClass:[NSData class]] && [cachedData length]) {
             return YES;
         } else {
             if ([cachedData isEqual:[NSNull null]]) {
-                return NO;
+                return self.shouldDrawGridLine;
             } else {
                 [self.cache setObject:[NSNull null] forKey:[url absoluteString]];
-                [overlay loadTileAtPath:path result:^(NSData * _Nullable tileData, NSError * _Nullable error) {
-                    if (tileData && [tileData length]) {
-                        [weakSelf.cache setObject:tileData forKey:[url absoluteString]];
-                        dispatch_async(dispatch_get_main_queue(), ^{
-                            [weakSelf setNeedsDisplayInMapRect:mapRect zoomScale:zoomScale];
-                        });
-                    } else {
-                        [weakSelf.cache setObject:[NSNull null] forKey:[url absoluteString]];
-                    }
-                }];
-                return NO;
+                if (self.backgroundTile) {
+                    [[self.bridge moduleForName:NSStringFromClass([KTTileOverlayEventEmitter class])] overlayWillLoadTileOverlayForPath:path];
+                    return self.shouldDrawGridLine;
+                } else {
+                    [overlay loadTileAtPath:path result:^(NSData * _Nullable tileData, NSError * _Nullable error) {
+                        if (tileData && [tileData length]) {
+                            [weakSelf.cache setObject:tileData forKey:[url absoluteString]];
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                [weakSelf setNeedsDisplayInMapRect:mapRect zoomScale:zoomScale];
+                            });
+                        } else {
+                            [weakSelf.cache setObject:[NSNull null] forKey:[url absoluteString]];
+                        }
+                    }];
+                    return NO;
+                }
             }
         }
     }
@@ -90,7 +144,6 @@
                                                    NSForegroundColorAttributeName:[UIColor blackColor]}];
             UIGraphicsPopContext();
         }
-        
 
         BOOL tileDataReady;
         NSData *tileData = [self.cache objectForKey:[url absoluteString]];
@@ -214,6 +267,15 @@
     [self update];
 }
 
+- (void)setBackgroundTile:(BOOL)backgroundTile
+{
+    _backgroundTile = backgroundTile;
+    if (self.renderer) {
+        self.renderer.backgroundTile = backgroundTile;
+    }
+    [self update];
+}
+
 - (void) createTileOverlayAndRendererIfPossible
 {
     if (!_urlTemplateSet) return;
@@ -237,6 +299,8 @@
     self.renderer.cache = self.cache;
     self.renderer.useDefaultRenderImplementation = NO;
     self.renderer.shouldDrawGridLine = self.shouldDrawGridLine;
+    self.renderer.backgroundTile = self.backgroundTile;
+    self.renderer.bridge = self.bridge;
 }
 
 - (void) update
