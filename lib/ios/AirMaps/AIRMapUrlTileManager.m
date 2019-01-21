@@ -17,10 +17,6 @@
 
 #import "AIRMapUrlTileManager.h"
 
-@interface AIRMapUrlTileManager()
-
-@end
-
 @implementation AIRMapUrlTileManager
 
 

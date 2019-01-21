@@ -17,8 +17,6 @@
 #import "AIRMap.h"
 #import "RCTConvert+AirMap.h"
 
-@class AIRMapUrlTile;
-
 @interface KTTileOverlayRenderer : MKTileOverlayRenderer
 @property (nonatomic, strong) NSCache *cache;
 @property BOOL useDefaultRenderImplementation;
@@ -34,7 +32,6 @@
 @property (nonatomic, strong) MKTileOverlay *tileOverlay;
 @property (nonatomic, strong) KTTileOverlayRenderer *renderer;
 @property (nonatomic, copy) NSString *urlTemplate;
-@property (nonatomic, strong) NSCache *cache;
 @property NSInteger maximumZ;
 @property NSInteger minimumZ;
 @property BOOL shouldReplaceMapContent;

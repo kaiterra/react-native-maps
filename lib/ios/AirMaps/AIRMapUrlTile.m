@@ -34,10 +34,30 @@ RCT_EXPORT_MODULE()
     return @{@"KTMapWillLoadTileEvent":KTMapWillLoadTileEvent};
 }
 
++ (BOOL)requiresMainQueueSetup
+{
+    return YES;
+}
+
 @end
 
 
 @implementation KTTileOverlayRenderer
+
+- (instancetype)initWithTileOverlay:(MKTileOverlay *)overlay
+{
+    self = [super initWithTileOverlay:overlay];
+    if (self != nil) {
+        self.cache = [NSCache new];
+    }
+    return self;
+}
+
+- (void)dealloc
+{
+    [self.cache removeAllObjects];
+    self.cache = nil;
+}
 
 - (NSInteger)zoomLevelForZoomScale:(MKZoomScale)zoomScale {
     return log2(zoomScale) + 20;
@@ -72,52 +92,55 @@ RCT_EXPORT_MODULE()
 
 - (BOOL)canDrawMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale
 {
-    if (self.useDefaultRenderImplementation) {
-        return [super canDrawMapRect:mapRect zoomScale:zoomScale];
-    } else {
-        __weak typeof(self) weakSelf = self;
-
-        MKTileOverlay *overlay = self.overlay;
-        NSInteger maximumZ = overlay.maximumZ;
-
-        MKZoomScale maximumZoomScale = zoomScale;
-        if ([self zoomLevelForZoomScale:maximumZoomScale] > maximumZ) {
-            if (self.backgroundTile) {
-                // Bounce back to maximum Z supported by background TileOverlay
-                maximumZoomScale = [self zoomScaleForZoomLevel:maximumZ];
-            } else {
-                // Give up rendering for unsupported zoom scale.
-                return NO;
-            }
+    __weak typeof(self) weakSelf = self;
+    
+    MKTileOverlay *overlay = self.overlay;
+    NSInteger maximumZ = overlay.maximumZ;
+    
+    MKZoomScale maximumZoomScale = zoomScale;
+    if ([self zoomLevelForZoomScale:maximumZoomScale] > maximumZ) {
+        if (self.backgroundTile) {
+            // Bounce back to maximum Z supported by background TileOverlay
+            maximumZoomScale = [self zoomScaleForZoomLevel:maximumZ];
+        } else {
+            // Give up rendering for unsupported zoom scale.
+            return NO;
         }
-        
-        MKTileOverlayPath path = [self pathForMapRect:mapRect zoomScale:maximumZoomScale];
-
-        NSURL *url = [overlay URLForTilePath:path];
-        id cachedData = [self.cache objectForKey:[url absoluteString]];
+    }
+    
+    MKTileOverlayPath path = [self pathForMapRect:mapRect zoomScale:maximumZoomScale];
+    
+    NSURL *url = [overlay URLForTilePath:path];
+    id cachedData = [self.cache objectForKey:[url absoluteString]];
+    
+    if (self.backgroundTile) {
+        if (!cachedData) {
+            [self.cache setObject:[NSNull null] forKey:[url absoluteString]];
+            // Could implement this event through RCTBubblingEventBlock
+            [[self.bridge moduleForName:NSStringFromClass([KTTileOverlayEventEmitter class])] overlayWillLoadTileOverlayForPath:path];
+        }
+        return NO;
+    } else {
         if (cachedData && [cachedData isKindOfClass:[NSData class]] && [cachedData length]) {
             return YES;
         } else {
+            // Data is being fetched, or there is no data available for this tile.
             if ([cachedData isEqual:[NSNull null]]) {
                 return self.shouldDrawGridLine;
             } else {
                 [self.cache setObject:[NSNull null] forKey:[url absoluteString]];
-                if (self.backgroundTile) {
-                    [[self.bridge moduleForName:NSStringFromClass([KTTileOverlayEventEmitter class])] overlayWillLoadTileOverlayForPath:path];
-                    return self.shouldDrawGridLine;
-                } else {
-                    [overlay loadTileAtPath:path result:^(NSData * _Nullable tileData, NSError * _Nullable error) {
-                        if (tileData && [tileData length]) {
-                            [weakSelf.cache setObject:tileData forKey:[url absoluteString]];
-                            dispatch_async(dispatch_get_main_queue(), ^{
-                                [weakSelf setNeedsDisplayInMapRect:mapRect zoomScale:zoomScale];
-                            });
-                        } else {
-                            [weakSelf.cache setObject:[NSNull null] forKey:[url absoluteString]];
-                        }
-                    }];
-                    return NO;
-                }
+                
+                [overlay loadTileAtPath:path result:^(NSData * _Nullable tileData, NSError * _Nullable error) {
+                    if (tileData && [tileData length]) {
+                        [weakSelf.cache setObject:tileData forKey:[url absoluteString]];
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            [weakSelf setNeedsDisplayInMapRect:mapRect zoomScale:zoomScale];
+                        });
+                    } else {
+                        [weakSelf.cache setObject:[NSNull null] forKey:[url absoluteString]];
+                    }
+                }];
+                return self.shouldDrawGridLine;
             }
         }
     }
@@ -129,57 +152,53 @@ RCT_EXPORT_MODULE()
         return;
     }
 
-    if (self.useDefaultRenderImplementation) {
-        return [super drawMapRect:mapRect zoomScale:zoomScale inContext:context];
+    MKTileOverlayPath path = [self pathForMapRect:mapRect zoomScale:zoomScale];
+    MKTileOverlay *overlay = (MKTileOverlay *)self.overlay;
+    NSURL *url = [overlay URLForTilePath:path];
+    CGRect rect = [self rectForMapRect:mapRect];
+    
+    if (self.shouldDrawGridLine) {
+        UIGraphicsPushContext(context);
+        NSString *text = [NSString stringWithFormat:@"Z=%ld\nX=%ld\nY=%ld",(long)path.z,(long)path.x,(long)path.y];
+        [text drawInRect:rect withAttributes:@{NSFontAttributeName:[UIFont systemFontOfSize:20.0/zoomScale],
+                                               NSForegroundColorAttributeName:[UIColor blackColor]}];
+        UIGraphicsPopContext();
+    }
+    
+    BOOL tileDataReady;
+    NSData *tileData = [self.cache objectForKey:[url absoluteString]];
+    if (!tileData || [tileData isEqual:[NSNull null]]) {
+        tileDataReady = NO;
     } else {
-        MKTileOverlayPath path = [self pathForMapRect:mapRect zoomScale:zoomScale];
-        MKTileOverlay *overlay = (MKTileOverlay *)self.overlay;
-        NSURL *url = [overlay URLForTilePath:path];
-        CGRect rect = [self rectForMapRect:mapRect];
-
-        if (self.shouldDrawGridLine) {
-            UIGraphicsPushContext(context);
-            NSString *text = [NSString stringWithFormat:@"Z=%ld\nX=%ld\nY=%ld",(long)path.z,(long)path.x,(long)path.y];
-            [text drawInRect:rect withAttributes:@{NSFontAttributeName:[UIFont systemFontOfSize:20.0/zoomScale],
-                                                   NSForegroundColorAttributeName:[UIColor blackColor]}];
-            UIGraphicsPopContext();
-        }
-
-        BOOL tileDataReady;
-        NSData *tileData = [self.cache objectForKey:[url absoluteString]];
-        if (!tileData || [tileData isEqual:[NSNull null]]) {
-            tileDataReady = NO;
-        } else {
-            tileDataReady = YES;
-        }
+        tileDataReady = YES;
+    }
+    
+    if (tileDataReady) {
+        CGImageRef imageRef = nil;
         
-        if (tileDataReady) {
-            CGImageRef imageRef = nil;
+        CGDataProviderRef provider = CGDataProviderCreateWithCFData((CFDataRef)tileData);
+        if (provider) {
+            imageRef = CGImageCreateWithPNGDataProvider(provider, nil, NO, kCGRenderingIntentDefault);
+            CGDataProviderRelease(provider);
+        }
+        if (imageRef) {
+            // Render tile image
+            CGRect tileRect = CGRectMake(0, 0, overlay.tileSize.width, overlay.tileSize.height);
+            UIGraphicsBeginImageContext(tileRect.size);
+            CGContextDrawImage(UIGraphicsGetCurrentContext(), tileRect, imageRef);
+            CGImageRelease(imageRef);
+            CGImageRef flippedImageRef = UIGraphicsGetImageFromCurrentImageContext().CGImage;
+            UIGraphicsEndImageContext();
             
-            CGDataProviderRef provider = CGDataProviderCreateWithCFData((CFDataRef)tileData);
-            if (provider) {
-                imageRef = CGImageCreateWithPNGDataProvider(provider, nil, NO, kCGRenderingIntentDefault);
-                CGDataProviderRelease(provider);
-            }
-            if (imageRef) {
-                // Render tile image
-                CGRect tileRect = CGRectMake(0, 0, overlay.tileSize.width, overlay.tileSize.height);
-                UIGraphicsBeginImageContext(tileRect.size);
-                CGContextDrawImage(UIGraphicsGetCurrentContext(), tileRect, imageRef);
-                CGImageRelease(imageRef);
-                CGImageRef flippedImageRef = UIGraphicsGetImageFromCurrentImageContext().CGImage;
-                UIGraphicsEndImageContext();
-                
-                CGContextDrawImage(context, [self rectForMapRect:mapRect], flippedImageRef);
-            }
+            CGContextDrawImage(context, [self rectForMapRect:mapRect], flippedImageRef);
         }
-        
-        if (self.shouldDrawGridLine) {
-            // Stroke rect border.
-            CGContextSetStrokeColorWithColor(context, [UIColor blueColor].CGColor);
-            CGContextSetLineWidth(context, 1.0/zoomScale);
-            CGContextStrokeRect(context, rect);
-        }
+    }
+    
+    if (self.shouldDrawGridLine) {
+        // Stroke rect border.
+        CGContextSetStrokeColorWithColor(context, [UIColor blueColor].CGColor);
+        CGContextSetLineWidth(context, 1.0/zoomScale);
+        CGContextStrokeRect(context, rect);
     }
 }
 
@@ -195,14 +214,11 @@ RCT_EXPORT_MODULE()
     self = [super init];
     if (self) {
         _alpha = 1.0;
-        self.cache = [NSCache new];
     }
     return self;
 }
 - (void)dealloc
 {
-    [self.cache removeAllObjects];
-    self.cache = nil;
     _tileOverlay = nil;
     _renderer = nil;
 }
@@ -296,8 +312,6 @@ RCT_EXPORT_MODULE()
         self.renderer.alpha = self.alpha;
     }
     self.renderer = [[KTTileOverlayRenderer alloc] initWithTileOverlay:self.tileOverlay];
-    self.renderer.cache = self.cache;
-    self.renderer.useDefaultRenderImplementation = NO;
     self.renderer.shouldDrawGridLine = self.shouldDrawGridLine;
     self.renderer.backgroundTile = self.backgroundTile;
     self.renderer.bridge = self.bridge;
