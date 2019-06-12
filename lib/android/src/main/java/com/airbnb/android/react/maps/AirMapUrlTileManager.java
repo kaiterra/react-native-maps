@@ -60,4 +60,9 @@ public class AirMapUrlTileManager extends ViewGroupManager<AirMapUrlTile> {
     view.setAlpha(alpha);
   }
 
+  @ReactProp(name = "flipY", defaultBoolean = false)
+  public void setFlipY(AirMapUrlTile view, boolean flipY) {
+    view.setFlipY(flipY);
+  }
+
 }
